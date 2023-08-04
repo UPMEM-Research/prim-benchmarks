@@ -55,39 +55,41 @@ static void update_host(T* C, T* A, unsigned int nr_elements) {
 // Main of the Host Application
 int main(int argc, char **argv) {
 
-    struct Params p = input_params(argc, argv);
+    struct Params p = input_params(argc, argv); // params 받아와
 
-    struct dpu_set_t dpu_set, dpu;
-    uint32_t nr_of_dpus;
+    struct dpu_set_t dpu_set, dpu; // dpu_set : 전체 설정 / dpu : for문 돌리면서 하나씩 설정해주는 변수
+    uint32_t nr_of_dpus; // sh에서 받아온 dpu 개수
     
     // Allocate DPUs and load binary
     DPU_ASSERT(dpu_alloc(NR_DPUS, NULL, &dpu_set));
-    DPU_ASSERT(dpu_load(dpu_set, DPU_BINARY, NULL));
-    DPU_ASSERT(dpu_get_nr_dpus(dpu_set, &nr_of_dpus));
+    DPU_ASSERT(dpu_load(dpu_set, DPU_BINARY, NULL)); // 
+    DPU_ASSERT(dpu_get_nr_dpus(dpu_set, &nr_of_dpus)); // dpus 개수 유효검사
     printf("Allocated %d DPU(s)\n", nr_of_dpus);
 
-    unsigned int i = 0;
-    double cc = 0;
-    double cc_min = 0;
-    const unsigned int input_size = p.exp == 0 ? p.input_size * nr_of_dpus : p.input_size;
+    unsigned int i = 0; // 각 DPU 주소 설정
+    double cc = 0; // performance 측정 용도
+    double cc_min = 0; // performance 측정 용도
+    const unsigned int input_size = p.exp == 0 ? p.input_size * nr_of_dpus : p.input_size; 
+    // exp :week
+    // input size 설정
 
     // Input/output allocation
     A = malloc(input_size * sizeof(T));
-    B = malloc(input_size * sizeof(T));
-    T *bufferA = A;
-    T *bufferB = B;
-    C2 = malloc(input_size * sizeof(T));
+    B = malloc(input_size * sizeof(T)); // A,B 공간 확보
+    T *bufferA = A; // buffer A 시작 주소
+    T *bufferB = B; // buffer B 시작 주소
+    C2 = malloc(input_size * sizeof(T)); // A,B 공간 확보
 
     // Create an input file with arbitrary data
-    read_input(A, B, input_size);
+    read_input(A, B, input_size); // A와 B에 숫자 넣기
 
     // Timer declaration
     Timer timer;
 
-    printf("NR_TASKLETS\t%d\tBL\t%d\n", NR_TASKLETS, BL);
+    printf("NR_TASKLETS\t%d\tBL\t%d\n", NR_TASKLETS, BL); // thread, block size 확인
 
     // Loop over main kernel
-    for(int rep = 0; rep < p.n_warmup + p.n_reps; rep++) {
+    for(int rep = 0; rep < p.n_warmup + p.n_reps; rep++) { // rep = 0, p.n_warmup = 1, p.n_reps = 3
 
         // Compute output on CPU (performance comparison and verification purposes)
         if(rep >= p.n_warmup)
@@ -103,11 +105,11 @@ int main(int argc, char **argv) {
         const unsigned int input_size_dpu = input_size / nr_of_dpus;
         unsigned int kernel = 0;
         dpu_arguments_t input_arguments = {input_size_dpu * sizeof(T), kernel};
-        DPU_ASSERT(dpu_copy_to(dpu_set, "DPU_INPUT_ARGUMENTS", 0, (const void *)&input_arguments, sizeof(input_arguments)));
+        DPU_ASSERT(dpu_copy_to(dpu_set, "DPU_INPUT_ARGUMENTS", 0, (const void *)&input_arguments, sizeof(input_arguments))); // dpu malloc
         // Copy input arrays
         i = 0;
         DPU_FOREACH (dpu_set, dpu) {
-            DPU_ASSERT(dpu_copy_to(dpu, DPU_MRAM_HEAP_POINTER_NAME, 0, bufferA + input_size_dpu * i, input_size_dpu * sizeof(T)));
+            DPU_ASSERT(dpu_copy_to(dpu, DPU_MRAM_HEAP_POINTER_NAME, 0, bufferA + input_size_dpu * i, input_size_dpu * sizeof(T))); // 각각 데이터 카피
             i++;
         }
         if(rep >= p.n_warmup)
@@ -117,11 +119,11 @@ int main(int argc, char **argv) {
         // Run DPU kernel
         if(rep >= p.n_warmup)
             start(&timer, 2, rep - p.n_warmup);
-        DPU_ASSERT(dpu_launch(dpu_set, DPU_SYNCHRONOUS));
+        DPU_ASSERT(dpu_launch(dpu_set, DPU_SYNCHRONOUS)); // 여기에서 DPU 파일 실행
         if(rep >= p.n_warmup)
             stop(&timer, 2);
 
-#if PRINT
+#if PRINT // 각 DPU 로그
         {
             unsigned int each_dpu = 0;
             printf("Display DPU Logs\n");
@@ -136,12 +138,13 @@ int main(int argc, char **argv) {
         printf("Retrieve results\n");
         if(rep >= p.n_warmup)
             start(&timer, 3, rep - p.n_warmup);
-        dpu_results_t results[nr_of_dpus];
         i = 0;
         DPU_FOREACH (dpu_set, dpu) {
             // Copy output array
             DPU_ASSERT(dpu_copy_from(dpu, DPU_MRAM_HEAP_POINTER_NAME, input_size_dpu * sizeof(T), bufferB + input_size_dpu * i, input_size_dpu * sizeof(T)));
-			
+			// B에 데이터 받기
+
+        dpu_results_t results[nr_of_dpus];    
 #if PERF
             results[i].cycles = 0;
             // Retrieve tasklet timings
@@ -150,7 +153,7 @@ int main(int argc, char **argv) {
                 result.cycles = 0;
                 DPU_ASSERT(dpu_copy_from(dpu, "DPU_RESULTS", each_tasklet * sizeof(dpu_results_t), &result, sizeof(dpu_results_t)));
                 if (result.cycles > results[i].cycles)
-                    results[i].cycles = result.cycles;
+                    results[i].cycles = result.cycles; // 각 DPU thread 중 최고 사이클
             }
 #endif
             i++;
@@ -164,7 +167,7 @@ int main(int argc, char **argv) {
         // Print performance results
         if(rep >= p.n_warmup){
             i = 0;
-            DPU_FOREACH(dpu_set, dpu) {
+            DPU_FOREACH(dpu_set, dpu) { // 최고 사이클 / 최저 사이클
                 if(results[i].cycles > max_cycles)
                     max_cycles = results[i].cycles;
                 if(results[i].cycles < min_cycles)
@@ -200,7 +203,7 @@ int main(int argc, char **argv) {
 
     // Check output
     bool status = true;
-    for (i = 0; i < input_size; i++) {
+    for (i = 0; i < input_size; i++) { // 받은 B의 값과 host에서 계산한 C2의 값 비교
         if(C2[i] != bufferB[i]){ 
             status = false;
 #if PRINT

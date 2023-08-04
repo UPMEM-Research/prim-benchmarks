@@ -19,7 +19,7 @@ __host dpu_results_t DPU_RESULTS[NR_TASKLETS];
 // Arithmetic operation
 static void update(T *bufferA, T scalar) {
     //#pragma unroll
-    for (unsigned int i = 0; i < BLOCK_SIZE / sizeof(T); i++){
+    for (unsigned int i = 0; i < BLOCK_SIZE / sizeof(T); i++){ // 1KB
         // WRAM READ
         T temp = bufferA[i];
 #ifdef ADD
@@ -61,16 +61,16 @@ int main_kernel1() {
     }
     // Barrier
     barrier_wait(&my_barrier);
-    perfcounter_cycles cycles;
+    perfcounter_cycles cycles; // 사이클 계산 시작
 
-    uint32_t input_size_dpu = DPU_INPUT_ARGUMENTS.size / sizeof(T);
+    uint32_t input_size_dpu = DPU_INPUT_ARGUMENTS.size / sizeof(T); // DPU_INPUT_ARGUMENTS.size = input_size_dpu(input_size / nr_of_dpus) * sizeof(T)
     T scalar = (T)input_size_dpu; // Simply use this number as a scalar
 
     dpu_results_t *result = &DPU_RESULTS[tasklet_id];
     result->cycles = 0;
 
     // Address of the current processing block in MRAM
-    uint32_t mram_base_addr_A = (uint32_t)(DPU_MRAM_HEAP_POINTER + (tasklet_id << BLOCK_SIZE_LOG2));
+    uint32_t mram_base_addr_A = (uint32_t)(DPU_MRAM_HEAP_POINTER + (tasklet_id << BLOCK_SIZE_LOG2)); // shift 2의 n승 곱하기
     uint32_t mram_base_addr_B = (uint32_t)(DPU_MRAM_HEAP_POINTER + (tasklet_id << BLOCK_SIZE_LOG2) + input_size_dpu * sizeof(T));
 
     // Initialize a local cache to store the MRAM block
