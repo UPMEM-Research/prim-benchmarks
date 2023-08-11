@@ -39,7 +39,7 @@ static void read_input(T* A, unsigned int nr_elements, unsigned int nr_elements_
         //A[i] = (T) (rand());
         A[i] = i + 1;
     }
-    for (unsigned int i = nr_elements; i < nr_elements_round; i++) { // Complete with removable elements
+    for (unsigned int i = nr_elements; i < nr_elements_round; i++) { // Complete with removable elements // ???? 이 부분 내일 보자
         A[i] = 0;
     }
 }
@@ -79,10 +79,10 @@ int main(int argc, char **argv) {
     uint32_t accum = 0;
     uint32_t total_count = 0;
 
-    const unsigned int input_size = p.exp == 0 ? p.input_size * nr_of_dpus : p.input_size; // Total input size (weak or strong scaling)
+    const unsigned int input_size = p.exp == 0 ? p.input_size * nr_of_dpus : p.input_size; // Total input size (weak or strong scaling) // 왜 week가 사이즈가 더 클까??
     const unsigned int input_size_dpu_ = divceil(input_size, nr_of_dpus); // Input size per DPU (max.)
     const unsigned int input_size_dpu_round = 
-        (input_size_dpu_ % (NR_TASKLETS * REGS) != 0) ? roundup(input_size_dpu_, (NR_TASKLETS * REGS)) : input_size_dpu_; // Input size per DPU (max.), 8-byte aligned
+        (input_size_dpu_ % (NR_TASKLETS * REGS) != 0) ? roundup(input_size_dpu_, (NR_TASKLETS * REGS)) : input_size_dpu_; // Input size per DPU (max.), 8-byte aligned // 전과 다른 ??
 
     // Input/output allocation
     A = malloc(input_size_dpu_round * nr_of_dpus * sizeof(T));
@@ -119,8 +119,12 @@ int main(int argc, char **argv) {
         // Copy input arrays
         i = 0;
         DPU_FOREACH(dpu_set, dpu, i) {
-            DPU_ASSERT(dpu_prepare_xfer(dpu, &input_arguments));
+            DPU_ASSERT(dpu_prepare_xfer(dpu, &input_arguments)); // prepare_xfer??
         }
+        // dpu_broadcast_to will copy the same buffer to all DPUs in the set
+        // dpu_copy_from will return DPU_ERR_INVALID_DPU_SET
+        // dpu_push_xfer: see Section Rank Transfer Interface
+
         DPU_ASSERT(dpu_push_xfer(dpu_set, DPU_XFER_TO_DPU, "DPU_INPUT_ARGUMENTS", 0, sizeof(input_arguments), DPU_XFER_DEFAULT));
         DPU_FOREACH(dpu_set, dpu, i) {
             DPU_ASSERT(dpu_prepare_xfer(dpu, bufferA + input_size_dpu * i));
@@ -156,7 +160,7 @@ int main(int argc, char **argv) {
             }
         }
 #endif
-
+        // 이 부분 유심히 봐야할 듯
         printf("Retrieve results\n");
         dpu_results_t results[nr_of_dpus];
         uint32_t* results_scan = malloc(nr_of_dpus * sizeof(uint32_t));
@@ -189,7 +193,7 @@ int main(int argc, char **argv) {
 #if PRINT
             printf("i=%d -- %u,  %u, %u\n", i, results_scan[i], accum, temp);
 #endif
-            free(results_retrieve[i]);
+        free(results_retrieve[i]);
         }
         if(rep >= p.n_warmup)
             stop(&timer, 3);
